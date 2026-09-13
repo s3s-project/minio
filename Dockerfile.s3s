@@ -1,0 +1,54 @@
+# Unofficial community build of the MinIO server (AGPL-3.0).
+#
+# The upstream commit this image is built from is recorded in .minio-source-ref;
+# the publish workflow passes it back in as MINIO_SOURCE_REF so the OCI labels
+# below state the exact source revision of every published image.
+FROM golang:1.24-bookworm AS build
+
+ARG LDFLAGS=""
+# Configurable so the image can also be built where the default Go module proxy is
+# unreachable; CI uses the default.
+ARG GOPROXY="https://proxy.golang.org,direct"
+
+ENV CGO_ENABLED=0
+ENV GOPROXY=$GOPROXY
+
+WORKDIR /src
+COPY . /src/
+
+# Same build flags as the upstream Makefile `build` target. -buildvcs=false keeps
+# the build independent of git metadata, which .dockerignore drops anyway.
+RUN go build -tags kqueue -trimpath -buildvcs=false -ldflags "$LDFLAGS" -o /out/minio . \
+    && /out/minio --version
+
+FROM alpine:3.21
+
+ARG MINIO_SOURCE_REF="unknown"
+
+LABEL org.opencontainers.image.title="MinIO server (unofficial community build)" \
+      org.opencontainers.image.description="Unofficial source build of the MinIO community server, used as an E2E backend by s3s. Not affiliated with or endorsed by MinIO, Inc." \
+      org.opencontainers.image.source="https://github.com/s3s-project/minio" \
+      org.opencontainers.image.revision="$MINIO_SOURCE_REF" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
+
+RUN apk add --no-cache ca-certificates
+
+COPY --from=build /out/minio /usr/bin/minio
+COPY --from=build /src/dockerscripts/docker-entrypoint.sh /usr/bin/docker-entrypoint.sh
+COPY --from=build /src/LICENSE /src/NOTICE /usr/share/minio/
+
+# Mirrors the official image environment, minus MINIO_UPDATE_MINISIGN_PUBKEY:
+# the update endpoint it guards no longer exists and updates are never enabled.
+ENV MINIO_ACCESS_KEY_FILE=access_key \
+    MINIO_SECRET_KEY_FILE=secret_key \
+    MINIO_ROOT_USER_FILE=access_key \
+    MINIO_ROOT_PASSWORD_FILE=secret_key \
+    MINIO_KMS_SECRET_KEY_FILE=kms_master_key \
+    MINIO_CONFIG_ENV_FILE=config.env \
+    MC_CONFIG_DIR=/tmp/.mc
+
+EXPOSE 9000
+VOLUME ["/data"]
+
+ENTRYPOINT ["/usr/bin/docker-entrypoint.sh"]
+CMD ["minio"]
