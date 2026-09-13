@@ -1063,3 +1063,16 @@ func (w *trackingResponseWriter) Write(b []byte) (int, error) {
 func (w *trackingResponseWriter) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
+
+// Flush forwards to the wrapped ResponseWriter.
+//
+// Embedding the http.ResponseWriter interface does not promote Flush, so
+// without this method every helper that type-asserts to http.Flusher (such as
+// internal/http.Flush) silently turns into a no-op for streamed responses.
+// Streaming APIs - ListenBucketNotification above all - then deliver nothing
+// until the HTTP server's write buffer happens to fill up.
+func (w *trackingResponseWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}

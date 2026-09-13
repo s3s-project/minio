@@ -23,6 +23,23 @@ both available and patched, without depending on any registry we do not control.
 - Publish workflow: [`.github/workflows/publish-ghcr.yml`](./.github/workflows/publish-ghcr.yml)
   → `ghcr.io/s3s-project/minio`.
 
+## Patches carried on this branch
+
+Upstream is unmaintained, so this branch is not only build files: it also carries the
+minimum patch needed for the server to behave the way the E2E suite expects.
+
+- `cmd/api-response.go`: `trackingResponseWriter` (added upstream in `52eee5a2f`) embeds
+  the `http.ResponseWriter` interface, and embedding an interface does not promote
+  `Flush`. Every helper that type-asserts to `http.Flusher` — `internal/http.Flush` — thus
+  became a silent no-op for streamed responses: `ListenBucketNotification` delivered
+  nothing until the HTTP server's write buffer happened to fill up, so clients that wait
+  for one event, such as mint's `minio-java` suite, hung until their timeout. The patch
+  forwards `Flush` to the wrapped writer.
+
+Because the patched source lives on this branch, the Corresponding Source for a published
+image is this repository at the tag it was built from, not the pinned upstream commit
+alone.
+
 ## Images
 
 - `ghcr.io/s3s-project/minio:<yyyymmddhhmm>` — one tag per publish, the UTC timestamp of
