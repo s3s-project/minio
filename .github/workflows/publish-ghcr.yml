@@ -107,6 +107,9 @@ jobs:
           context: .
           file: Dockerfile.s3s
           platforms: ${{ matrix.platform }}
+          # BuildKit still needs a name for the push even though push-by-digest
+          # discards the tag; the manifest list is tagged by the publish job.
+          tags: ${{ env.REGISTRY_IMAGE }}
           build-args: |
             LDFLAGS=${{ needs.guard.outputs.ldflags }}
             MINIO_SOURCE_REF=${{ needs.guard.outputs.source_ref }}
